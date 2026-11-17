@@ -14,3 +14,5 @@ job/.venv/
 *.env
 .env
 *service_account*.json
+setup/client_secret.json
+setup/.venv/
