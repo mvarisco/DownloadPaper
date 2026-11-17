@@ -21,8 +21,14 @@ def main() -> int:
 
     try:
         pdf_bytes = download_today_pdf(cfg.ifq_username, cfg.ifq_password, today)
-        upload_pdf(cfg.gdrive_service_account_json, cfg.gdrive_folder_id, filename, pdf_bytes)
-        deleted = cleanup_old_files(cfg.gdrive_service_account_json, cfg.gdrive_folder_id, cfg.retention_days)
+        upload_pdf(
+            cfg.gdrive_client_id, cfg.gdrive_client_secret, cfg.gdrive_refresh_token,
+            cfg.gdrive_folder_id, filename, pdf_bytes,
+        )
+        deleted = cleanup_old_files(
+            cfg.gdrive_client_id, cfg.gdrive_client_secret, cfg.gdrive_refresh_token,
+            cfg.gdrive_folder_id, cfg.retention_days,
+        )
         print(f"OK: caricato {filename}. Rimossi {len(deleted)} file piu' vecchi di {cfg.retention_days} giorni.")
         return 0
     except Exception as exc:

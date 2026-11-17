@@ -1,25 +1,39 @@
-"""Upload su Google Drive via Service Account e pulizia dei file piu' vecchi."""
+"""Upload su Google Drive via OAuth2 (account utente) e pulizia dei file piu' vecchi.
+
+I Service Account non hanno quota di storage su un Google Drive personale
+(non-Workspace): possono scrivere solo su Shared Drive, feature a pagamento.
+Per questo si usa OAuth2 con un refresh token dell'account utente (vedi
+../setup/generate_refresh_token.py).
+"""
 from __future__ import annotations
 
 import io
-import json
 from datetime import datetime, timedelta, timezone
 
-from google.oauth2 import service_account
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
-def _build_service(service_account_json: str):
-    info = json.loads(service_account_json)
-    credentials = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+def _build_service(client_id: str, client_secret: str, refresh_token: str):
+    credentials = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri=TOKEN_URI,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
+    )
+    credentials.refresh(Request())
     return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
 
-def upload_pdf(service_account_json: str, folder_id: str, filename: str, content: bytes) -> str:
-    service = _build_service(service_account_json)
+def upload_pdf(client_id: str, client_secret: str, refresh_token: str, folder_id: str, filename: str, content: bytes) -> str:
+    service = _build_service(client_id, client_secret, refresh_token)
 
     # Idempotenza: se un file con lo stesso nome esiste gia' nella cartella, non lo ricarica.
     existing = service.files().list(
@@ -35,8 +49,8 @@ def upload_pdf(service_account_json: str, folder_id: str, filename: str, content
     return created["id"]
 
 
-def cleanup_old_files(service_account_json: str, folder_id: str, retention_days: int) -> list[str]:
-    service = _build_service(service_account_json)
+def cleanup_old_files(client_id: str, client_secret: str, refresh_token: str, folder_id: str, retention_days: int) -> list[str]:
+    service = _build_service(client_id, client_secret, refresh_token)
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
 

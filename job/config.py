@@ -20,7 +20,9 @@ def _require(name: str) -> str:
 class Config:
     ifq_username: str
     ifq_password: str
-    gdrive_service_account_json: str
+    gdrive_client_id: str
+    gdrive_client_secret: str
+    gdrive_refresh_token: str
     gdrive_folder_id: str
     retention_days: int
     smtp_host: str
@@ -34,7 +36,9 @@ class Config:
         return cls(
             ifq_username=_require("IFQ_USERNAME"),
             ifq_password=_require("IFQ_PASSWORD"),
-            gdrive_service_account_json=_require("GDRIVE_SERVICE_ACCOUNT_JSON"),
+            gdrive_client_id=_require("GDRIVE_CLIENT_ID"),
+            gdrive_client_secret=_require("GDRIVE_CLIENT_SECRET"),
+            gdrive_refresh_token=_require("GDRIVE_REFRESH_TOKEN"),
             gdrive_folder_id=_require("GDRIVE_FOLDER_ID"),
             retention_days=int(os.environ.get("RETENTION_DAYS", "5")),
             smtp_host=os.environ.get("SMTP_HOST", "smtp.gmail.com"),
