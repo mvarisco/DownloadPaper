@@ -11,18 +11,25 @@
 > puo' scrivere file solo su uno Shared Drive, feature a pagamento. Per questo si
 > usa OAuth2 con il tuo account Google normale.
 
-1. "API e servizi" → "Schermata consenso OAuth": tipo **Esterno**, compila i campi minimi richiesti, e aggiungi il tuo indirizzo Google come **utente di test** (così non serve la verifica Google).
+1. "API e servizi" → "Schermata consenso OAuth" (o "Google Auth Platform" → scheda "Audience"): tipo **Esterno**, compila i campi minimi richiesti, e aggiungi il tuo indirizzo Google come **utente di test**.
 2. "API e servizi" → "Credenziali" → "Crea credenziali" → **"ID client OAuth"** → tipo applicazione **"App desktop"** → crea.
 3. Scarica il JSON delle credenziali e salvalo come `setup/client_secret.json` (è ignorato da git, non verrà mai committato).
-4. In locale:
+4. **Pubblica l'app** (necessario per evitare che il refresh token scada dopo 7 giorni, limite delle app in stato "Testing"):
+   - Scheda **"Branding"**: compila Nome app, Email di assistenza utenti, Email di contatto sviluppatore.
+   - Scheda **"Data Access"**: aggiungi esplicitamente lo scope `.../auth/drive.file`.
+   - Se richiesti un **URL homepage** e un **URL privacy policy**, abilita GitHub Pages per questo repo (`Settings → Pages → Source: Deploy from a branch → main → /docs`) e usa gli URL risultanti, tipicamente:
+     - Homepage: `https://<tuo-utente-github>.github.io/DownloadPaper/`
+     - Privacy policy: `https://<tuo-utente-github>.github.io/DownloadPaper/privacy-policy.html`
+   - Torna sulla scheda **"Audience"** e clicca **"Publish App"**.
+5. In locale:
    ```bash
    cd setup
    python3 -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
    python generate_refresh_token.py
    ```
-5. Si apre il browser: fai login con l'account Google che possiede la cartella `ilFattoQuotidiano` e concedi il permesso.
-6. Lo script stampa `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET`, `GDRIVE_REFRESH_TOKEN`: tienili a portata di mano per il punto 4 più sotto.
+6. Si apre il browser: fai login con l'account Google che possiede la cartella `ilFattoQuotidiano`. Poiché l'app non è verificata da Google, comparirà "Google non ha verificato questa app": clicca **"Avanzate"** → **"Vai su [nome app] (non sicuro)"**, poi concedi il permesso.
+7. Lo script stampa `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET`, `GDRIVE_REFRESH_TOKEN`: tienili a portata di mano per il punto 4 più sotto.
 
 ## 3. Recupera l'ID della cartella Drive
 
