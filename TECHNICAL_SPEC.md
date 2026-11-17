@@ -100,11 +100,11 @@ flowchart LR
 
 ## 10. Decisioni finali
 
-1. **Hosting/scheduler:** GitHub Actions, sul repo `mvarisco/DownloadPaper` (già esistente), esecuzione giornaliera via `cron` alle **06:00 Europe/Rome**.
+1. **Hosting/scheduler:** GitHub Actions, sul repo `mvarisco/DownloadPaper` (già esistente), esecuzione giornaliera via `cron` alle **05:00 Europe/Rome**.
 2. **Accesso a Google Drive:** Service Account, con la cartella Drive condivisa in lettura/scrittura con l'email del service account.
 3. **Cartella Drive:** già esistente, nome **`ilFattoQuotidiano`** (va recuperato il suo ID cartella e condivisa con l'email del service account una volta creato).
 4. **Canale di notifica errori:** Email.
-5. **Orario di esecuzione:** 06:00 (Europe/Rome).
+5. **Orario di esecuzione:** 05:00 (Europe/Rome).
 6. **Retention:** conservare solo i PDF degli **ultimi 5 giorni** su Drive; il job elimina automaticamente i file più vecchi nella cartella dedicata.
 7. **Fase esplorativa login/PDF:** eseguita tramite uno script Playwright locale interattivo (headed, nessuna credenziale passata allo script o in chat); l'utente effettua il login manualmente nel browser aperto dallo script, che osserva solo il traffico di rete e la struttura della pagina per produrre un report tecnico (vedi `exploration/`).
 
