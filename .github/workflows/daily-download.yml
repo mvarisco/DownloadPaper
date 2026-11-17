@@ -1,0 +1,51 @@
+name: Download quotidiano e upload su Drive
+
+on:
+  schedule:
+    # 06:00 Europe/Rome = 05:00 UTC (CET, ora solare) oppure 04:00 UTC (CEST, ora legale).
+    # Entrambi gli orari sono schedulati; lo step "Verifica orario" scarta quello sbagliato.
+    - cron: "0 5 * * *"
+    - cron: "0 4 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  download-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verifica orario (06:00 Europe/Rome)
+        id: time-check
+        run: |
+          current_hour=$(TZ=Europe/Rome date +%H)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$current_hour" = "06" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.time-check.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installa dipendenze
+        if: steps.time-check.outputs.run == 'true'
+        working-directory: job
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Esegui il job
+        if: steps.time-check.outputs.run == 'true'
+        working-directory: job
+        env:
+          IFQ_USERNAME: ${{ secrets.IFQ_USERNAME }}
+          IFQ_PASSWORD: ${{ secrets.IFQ_PASSWORD }}
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+        run: python main.py

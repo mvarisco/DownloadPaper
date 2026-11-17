@@ -1,0 +1,16 @@
+# Dati personali/sessione generati dallo script di esplorazione: mai in git.
+exploration/report.md
+exploration/network_log.jsonl
+exploration/archive_page_after_login.html
+exploration/.venv/
+
+# Python
+__pycache__/
+*.pyc
+job/.venv/
+.venv/
+
+# Secrets locali (mai committare credenziali)
+*.env
+.env
+*service_account*.json
