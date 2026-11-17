@@ -2,10 +2,10 @@ name: Download quotidiano e upload su Drive
 
 on:
   schedule:
-    # 06:00 Europe/Rome = 05:00 UTC (CET, ora solare) oppure 04:00 UTC (CEST, ora legale).
+    # 05:00 Europe/Rome = 04:00 UTC (CET, ora solare) oppure 03:00 UTC (CEST, ora legale).
     # Entrambi gli orari sono schedulati; lo step "Verifica orario" scarta quello sbagliato.
-    - cron: "0 5 * * *"
     - cron: "0 4 * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -14,11 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verifica orario (06:00 Europe/Rome)
+      - name: Verifica orario (05:00 Europe/Rome)
         id: time-check
         run: |
           current_hour=$(TZ=Europe/Rome date +%H)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$current_hour" = "06" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$current_hour" = "05" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
