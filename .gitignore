@@ -9,6 +9,8 @@ __pycache__/
 *.pyc
 job/.venv/
 .venv/
+job/debug_failure_screenshot.png
+job/debug_failure_page.html
 
 # Secrets locali (mai committare credenziali)
 *.env

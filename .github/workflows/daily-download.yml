@@ -51,3 +51,14 @@ jobs:
           SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
           NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
         run: python main.py
+
+      - name: Carica diagnostica in caso di errore
+        if: failure() && steps.time-check.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-failure
+          path: |
+            job/debug_failure_screenshot.png
+            job/debug_failure_page.html
+          if-no-files-found: ignore
+          retention-days: 5
