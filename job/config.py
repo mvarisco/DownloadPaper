@@ -30,6 +30,8 @@ class Config:
     smtp_user: str
     smtp_app_password: str
     notify_email_to: str
+    failure_notify_threshold: int
+    prior_consecutive_failures: int
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -46,4 +48,12 @@ class Config:
             smtp_user=_require("SMTP_USER"),
             smtp_app_password=_require("SMTP_APP_PASSWORD"),
             notify_email_to=os.environ.get("NOTIFY_EMAIL_TO") or os.environ.get("SMTP_USER", ""),
+            # Lo script gira ogni 10 minuti (invocato da crontab via gh workflow
+            # run): non si notifica ad ogni fallimento, ma una sola volta quando
+            # i fallimenti consecutivi raggiungono questa soglia. Il conteggio
+            # pregresso viene calcolato dal workflow leggendo le run passate di
+            # questa stessa Action (vedi daily-download.yml), non da uno stato
+            # locale: ogni esecuzione e' un runner nuovo ed effimero.
+            failure_notify_threshold=int(os.environ.get("FAILURE_NOTIFY_THRESHOLD", "10")),
+            prior_consecutive_failures=int(os.environ.get("PRIOR_CONSECUTIVE_FAILURES", "0")),
         )

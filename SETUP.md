@@ -58,9 +58,60 @@ In `Settings → Secrets and variables → Actions → New repository secret` (*
 | `SMTP_APP_PASSWORD` | la app password generata al punto 4 |
 | `NOTIFY_EMAIL_TO` | indirizzo email a cui ricevere le notifiche di errore (puo' coincidere con `SMTP_USER`) |
 
-## 6. Primo test
+## 6. Primo test manuale
 
-1. Vai su `Actions → Download quotidiano e upload su Drive → Run workflow` per un test manuale immediato (non aspetta le 06:00).
+1. Vai su `Actions → Download quotidiano e upload su Drive → Run workflow` per un test manuale immediato.
 2. Controlla i log del job e che il PDF compaia nella cartella Drive.
-3. Il cron schedulato gira automaticamente ogni giorno alle 06:00 (Europe/Rome).
+
+## 7. Scheduling: crontab su una VM Linux (es. Oracle Cloud) che invoca la Action
+
+Il workflow non ha piu' un suo `schedule:` interno (su questo repo il cron di
+GitHub Actions non partiva in modo affidabile). Lo scheduling vero e proprio
+e' esterno: un **crontab su una VM Linux** (es. un compute Oracle Cloud
+Infrastructure gia' posseduto) invoca il workflow **ogni 10 minuti** tramite
+`gh workflow run`, che genera un evento `workflow_dispatch`. Tutta la logica
+(login, download, upload, pulizia, notifica) resta ed esegue interamente
+dentro GitHub Actions, esattamente come prima: sulla VM non viene installato
+ne' eseguito nulla del job Python, serve solo la GitHub CLI (`gh`).
+
+Il job stesso e' idempotente (vedi `job/main.py`): prima di fare login
+controlla se il PDF di oggi e' gia' su Drive, e in tal caso non fa nulla.
+Questo rende sicuro invocarlo ogni 10 minuti: la maggior parte delle
+esecuzioni, una volta scaricata l'edizione del giorno, dura pochi secondi
+senza login ne' Playwright. In caso di fallimento, il workflow non manda una
+email ad ogni tentativo: calcola quante esecuzioni **consecutive** di questa
+stessa Action sono fallite leggendo la cronologia delle run passate (step
+"Calcola fallimenti consecutivi pregressi", via `gh run list`, nessun nuovo
+secret necessario) e manda **una sola** email quando si raggiungono 10
+fallimenti di fila (soglia di default: 10, modificabile passando una
+variabile d'ambiente `FAILURE_NOTIFY_THRESHOLD` al passo "Esegui il job" nel
+workflow).
+
+1. Sulla VM Linux, installa la [GitHub CLI](https://cli.github.com/) se non
+   gia' presente (su Ubuntu/Debian, vedi istruzioni ufficiali del pacchetto
+   `gh`).
+2. Autenticati una tantum con un account/token che abbia il permesso di
+   lanciare workflow su questo repository:
+   ```bash
+   gh auth login
+   ```
+   Segui il flusso interattivo (login via browser o incollando un Personal
+   Access Token con scope `repo` e `workflow`).
+3. Testa manualmente l'invocazione:
+   ```bash
+   gh workflow run daily-download.yml --repo <tuo-utente>/DownloadPaper
+   ```
+   Controlla su `Actions` che la run sia partita, e nei log che il PDF
+   compaia nella cartella Drive (o che venga loggato "gia' presente" se gia'
+   scaricato in precedenza).
+4. Configura il crontab (`crontab -e`) per lanciarlo ogni 10 minuti:
+   ```cron
+   */10 * * * * /usr/bin/gh workflow run daily-download.yml --repo <tuo-utente>/DownloadPaper >> /home/<utente>/ifq-trigger.log 2>&1
+   ```
+   Usa il percorso assoluto di `gh` (verificabile con `which gh`) perche'
+   crontab non eredita il `PATH` della shell interattiva.
+5. Il file di log (`ifq-trigger.log`) contiene solo l'esito del comando di
+   trigger (non i log del job, che restano su GitHub Actions): cresce poco,
+   ma puoi comunque aggiungere una rotazione (`logrotate`) se vuoi tenerlo
+   sotto controllo nel tempo.
 

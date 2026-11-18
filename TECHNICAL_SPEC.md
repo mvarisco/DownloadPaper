@@ -1,6 +1,6 @@
 # Technical Specification — Download Automatico "Il Fatto Quotidiano" → Google Drive
 
-Stato: **VALIDATO** (2026-11-17). Decisioni finali riportate nella sezione 10.
+Stato: **VALIDATO** (2026-11-17), **rivisto** (2026-11-18, vedi sezione 11). Decisioni finali riportate nella sezione 10.
 
 ## 1. Obiettivo
 
@@ -64,8 +64,8 @@ flowchart LR
 
 - Identificazione dell'edizione corrente tramite la data odierna (fuso orario Europe/Rome), confrontata con la data mostrata in testa all'archivio (es. `MAR 17 NOVEMBRE 2026`).
 - Download del PDF tramite il link/azione disponibile solo da loggato (da individuare in fase esplorativa: potrebbe essere un link diretto `.pdf`, un popup "leggi/scarica", o un visualizzatore che richiede di estrarre l'URL reale dalle chiamate di rete).
-- **Idempotenza:** se il PDF del giorno risulta già presente su Google Drive (stesso nome file), il job non lo riscarica/ricarica una seconda volta.
-- **Retry:** in caso di assenza momentanea dell'edizione (es. pubblicata in ritardo) o errore di rete, un numero limitato di retry (es. 3 tentativi con backoff) nella stessa esecuzione; se fallisce comunque, notifica e si riprova il giorno successivo.
+- **Idempotenza:** prima di fare login viene controllato se il PDF del giorno risulta gia' presente su Google Drive (stesso nome file): in tal caso il job non fa nulla (nessun login, nessun download). Fondamentale dato che il job viene invocato ogni 10 minuti (vedi sezione 11): evita login/richieste ripetute una volta che l'edizione e' gia' stata scaricata.
+- **Retry:** nessun retry interno nella singola esecuzione; la granularita' del retry e' data dalla frequenza di invocazione esterna (nuovo tentativo ogni 10 minuti, vedi sezione 11).
 
 ## 6. Caricamento su Google Drive
 
@@ -79,16 +79,16 @@ flowchart LR
 
 ## 7. Notifiche e osservabilità
 
-- In caso di **successo**: log (e opzionalmente notifica leggera, es. messaggio Telegram) con link al file caricato.
-- In caso di **errore** (login fallito, PDF non trovato, upload fallito): notifica via email o Telegram/altro canale a scelta dell'utente, con dettaglio dell'errore.
-- Log di ogni esecuzione conservati (es. come artifact del workflow GitHub Actions) per diagnosi successiva.
+- In caso di **successo**: log sulla singola esecuzione (console del job, visibile nei log della run di GitHub Actions).
+- In caso di **errore** (login fallito, PDF non trovato, upload fallito): l'errore viene loggato ad ogni tentativo, ma **non genera una email ad ogni fallimento** (il job viene invocato ogni 10 minuti, sarebbe eccessivo). Viene invece inviata **una sola email** quando i fallimenti **consecutivi** di questa stessa Action raggiungono una soglia (default 10): il conteggio e' calcolato leggendo la cronologia delle run passate del workflow (via `gh run list`, dentro il workflow stesso), non uno stato esterno — vedi sezione 11.
+- Log di ogni esecuzione conservati nella cronologia delle run di GitHub Actions.
 
 ## 8. Stack tecnico proposto
 
 - **Linguaggio:** Python 3.
 - **Browser automation:** Playwright (gestione login/sessione/eventuale JS rendering).
 - **Google Drive:** libreria ufficiale `google-api-python-client` + `google-auth`.
-- **Scheduling:** GitHub Actions (`schedule: cron`), orario proposto: dopo la pubblicazione tipica dell'edizione digitale (da confermare, indicativamente mattina presto ora italiana).
+- **Scheduling:** GitHub Actions (`workflow_dispatch`), invocato ogni 10 minuti da un crontab esterno su una VM Linux; vedi sezione 11.
 - **Secrets:** GitHub Secrets (credenziali sito + refresh token Google Drive).
 
 ## 9. Sicurezza
@@ -100,13 +100,44 @@ flowchart LR
 
 ## 10. Decisioni finali
 
-1. **Hosting/scheduler:** GitHub Actions, sul repo `mvarisco/DownloadPaper` (già esistente), esecuzione giornaliera via `cron` alle **05:00 Europe/Rome**.
+1. **Hosting/scheduler:** GitHub Actions, sul repo `mvarisco/DownloadPaper` (già esistente), invocato via `workflow_dispatch` ogni 10 minuti da un crontab esterno su una VM Linux (vedi sezione 11).
 2. **Accesso a Google Drive:** Service Account, con la cartella Drive condivisa in lettura/scrittura con l'email del service account.
 3. **Cartella Drive:** già esistente, nome **`ilFattoQuotidiano`** (va recuperato il suo ID cartella e condivisa con l'email del service account una volta creato).
-4. **Canale di notifica errori:** Email.
-5. **Orario di esecuzione:** 05:00 (Europe/Rome).
+4. **Canale di notifica errori:** Email, **una sola volta** dopo 10 fallimenti consecutivi (vedi sezione 11), non ad ogni esecuzione fallita.
+5. **Frequenza di esecuzione:** ogni 10 minuti, 24 ore su 24; il job e' idempotente e non fa nulla se il PDF del giorno e' gia' su Drive (vedi sezione 11).
 6. **Retention:** conservare solo i PDF degli **ultimi 5 giorni** su Drive; il job elimina automaticamente i file più vecchi nella cartella dedicata.
 7. **Fase esplorativa login/PDF:** eseguita tramite uno script Playwright locale interattivo (headed, nessuna credenziale passata allo script o in chat); l'utente effettua il login manualmente nel browser aperto dallo script, che osserva solo il traffico di rete e la struttura della pagina per produrre un report tecnico (vedi `exploration/`).
 
----
-Prossimo passo: l'utente esegue lo script in `exploration/` per produrre il report, poi si procede con l'implementazione del job di produzione.
+## 11. Revisione 2026-11-18
+
+In produzione lo schedule nativo di GitHub Actions (`schedule: cron`) non
+partiva in modo affidabile. Decisioni riviste rispetto alla sezione 10
+originale, mantenendo **tutta la logica del job dentro GitHub Actions**
+(nessuna esecuzione del job Python/Playwright al di fuori della Action):
+
+1. **Trigger esterno invece di `schedule:`.** Il workflow mantiene solo
+   `workflow_dispatch` come trigger. Un **crontab su una VM Linux** che
+   l'utente possiede gia' (compute Oracle Cloud Infrastructure) lo invoca
+   ogni 10 minuti con `gh workflow run` (GitHub CLI). Sulla VM non viene
+   installato ne' eseguito nulla del job: serve solo `gh` autenticato
+   (`gh auth login`).
+2. **Frequenza aumentata da 1 volta al giorno a ogni 10 minuti.** Per non
+   moltiplicare login/download inutili, il job controlla **prima del login**
+   se il PDF di oggi e' gia' presente su Drive: se si', non fa nulla; se no,
+   procede con login, download, upload e pulizia retention. Questo rende
+   sicuro invocarlo molto piu' spesso di una volta al giorno.
+3. **Notifiche di errore ridotte, senza stato esterno.** Non viene piu'
+   inviata una email ad ogni esecuzione fallita. Viene invece inviata **una
+   sola email** quando i fallimenti **consecutivi** raggiungono una soglia
+   configurabile (default 10). Poiche' ogni run della Action e' un runner
+   nuovo ed effimero, il conteggio non usa uno stato persistito esternamente:
+   un passo del workflow (`gh run list --workflow daily-download.yml
+   --status completed`) legge la cronologia delle run passate di questa
+   stessa Action e conta quante delle piu' recenti sono fallite di fila
+   (fermandosi al primo esito diverso da "failure"); il risultato viene
+   passato al job come variabile d'ambiente. Nessun nuovo secret: la lettura
+   usa il `GITHUB_TOKEN` automatico della Action con permesso `actions: read`.
+4. **Secrets invariati:** restano GitHub Secrets (nessun file `.env` o
+   credenziale sulla VM Linux, che si limita a invocare il workflow).
+
+Istruzioni operative aggiornate in `SETUP.md`.

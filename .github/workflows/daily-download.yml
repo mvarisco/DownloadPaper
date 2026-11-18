@@ -1,12 +1,17 @@
 name: Download quotidiano e upload su Drive
 
+# Nessuno "schedule" qui: su questo repo il cron di GitHub Actions non
+# partiva in modo affidabile. Lo scheduling reale e' esterno: un crontab su
+# una VM Linux (vedi SETUP.md) invoca questo workflow ogni 10 minuti con
+# `gh workflow run`, che genera un evento workflow_dispatch.
 on:
-  schedule:
-    # 05:00 Europe/Rome = 04:00 UTC (CET, ora solare) oppure 03:00 UTC (CEST, ora legale).
-    # Entrambi gli orari sono schedulati; lo step "Verifica orario" scarta quello sbagliato.
-    - cron: "0 4 * * *"
-    - cron: "0 3 * * *"
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+  # Serve in lettura per poter leggere la cronologia delle run precedenti di
+  # questo stesso workflow (step "Calcola fallimenti consecutivi pregressi").
+  actions: read
 
 jobs:
   download-and-upload:
@@ -14,31 +19,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verifica orario (05:00 Europe/Rome)
-        id: time-check
+      - name: Calcola fallimenti consecutivi pregressi
+        id: prior-failures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          current_hour=$(TZ=Europe/Rome date +%H)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$current_hour" = "05" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Lo script viene invocato ogni 10 minuti da un crontab esterno: ogni
+          # esecuzione e' un runner nuovo ed effimero, quindi per sapere "quante
+          # volte di fila ha fallito" si legge la cronologia delle run passate
+          # di questa stessa Action (si ferma al primo esito diverso da
+          # "failure"), invece di tenere uno stato esterno.
+          conclusions=$(gh run list --workflow "daily-download.yml" --status completed --limit 20 --json conclusion --jq '.[].conclusion')
+          count=0
+          while IFS= read -r conclusion; do
+            if [ "$conclusion" = "failure" ]; then
+              count=$((count + 1))
+            else
+              break
+            fi
+          done <<< "$conclusions"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
-        if: steps.time-check.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Installa dipendenze
-        if: steps.time-check.outputs.run == 'true'
         working-directory: job
         run: |
           pip install -r requirements.txt
           playwright install --with-deps chromium
 
       - name: Esegui il job
-        if: steps.time-check.outputs.run == 'true'
         working-directory: job
         env:
           IFQ_USERNAME: ${{ secrets.IFQ_USERNAME }}
@@ -50,10 +63,11 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
           NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+          PRIOR_CONSECUTIVE_FAILURES: ${{ steps.prior-failures.outputs.count }}
         run: python main.py
 
       - name: Carica diagnostica in caso di errore
-        if: failure() && steps.time-check.outputs.run == 'true'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: debug-failure
